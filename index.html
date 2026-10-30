@@ -225,14 +225,16 @@
       padding: 8px 10px;
     }
 
+    /* Input wrapper left-aligns number right after £ */
     .currency-input-wrap {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: flex-start;
       background: #ffffff;
       border: 1.5px solid var(--input-border);
       border-radius: 6px;
       padding: 4px 8px;
+      width: 130px;
       transition: box-shadow 0.15s ease;
     }
 
@@ -243,21 +245,24 @@
     .currency-symbol {
       color: #92400e;
       font-weight: 700;
-      margin-right: 4px;
+      margin-right: 2px;
       user-select: none;
+      flex-shrink: 0;
     }
 
     .currency-input {
-      width: 105px;
+      width: 100%;
       border: none;
       outline: none;
-      text-align: right;
+      text-align: left; /* Left justified immediately after currency symbol */
       font-family: var(--font-stack);
-      font-size: 16px; /* Prevents automatic zoom on iOS Safari */
+      font-size: 16px; /* Prevents auto zoom in iOS Safari */
       font-weight: 700;
       color: var(--text-main);
       background: transparent;
       font-variant-numeric: tabular-nums;
+      padding: 0;
+      margin: 0;
     }
 
     .net-cell {
@@ -371,7 +376,6 @@
         padding: 16px 14px;
       }
 
-      /* Stacked card-table on portrait mobile so all columns fit without horizontal scrolling */
       .table-wrapper {
         overflow-x: visible;
         border: none;
@@ -410,8 +414,8 @@
         padding-right: 12px;
       }
 
-      .currency-input {
-        width: 120px;
+      .currency-input-wrap {
+        width: 140px;
       }
     }
   </style>
@@ -460,13 +464,13 @@
             <td class="input-cell" data-label="Mortgage (Editable)">
               <div class="currency-input-wrap">
                 <span class="currency-symbol">£</span>
-                <input type="number" id="mortgageInput" class="currency-input" step="1000" min="0" inputmode="decimal" />
+                <input type="text" id="mortgageInput" class="currency-input" inputmode="numeric" />
               </div>
             </td>
             <td class="input-cell" data-label="Gross House Value (Editable)">
               <div class="currency-input-wrap">
                 <span class="currency-symbol">£</span>
-                <input type="number" id="grossInput" class="currency-input" step="1000" min="0" inputmode="decimal" />
+                <input type="text" id="grossInput" class="currency-input" inputmode="numeric" />
               </div>
             </td>
             <td class="net-cell" id="netCell" data-label="Net House Value"></td>
@@ -487,7 +491,6 @@
 </div>
 
 <script>
-  // Define the 4 spreadsheet tabs and their exact formulas
   const SCENARIOS = [
     {
       id: "equal-thirds",
@@ -589,7 +592,7 @@
   const syncToggle = document.getElementById("syncToggle");
   const resetBtn = document.getElementById("resetBtn");
 
-  // Format currency nicely (matches spreadsheet rounding: whole pounds if integer, up to 2 decimals otherwise)
+  // Format currency for table and chart display
   function formatCurrency(val) {
     const isWhole = Math.abs(val - Math.round(val)) < 0.005;
     return new Intl.NumberFormat("en-GB", {
@@ -600,13 +603,59 @@
     }).format(val);
   }
 
-  // Format percentage for column headers
+  // Format integer with commas for editable text fields
+  function formatWithCommas(num) {
+    if (num === null || num === undefined || isNaN(num)) return "0";
+    const parts = num.toString().split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  function parseFormattedNumber(str) {
+    if (!str) return 0;
+    const clean = str.replace(/,/g, "").trim();
+    return parseFloat(clean) || 0;
+  }
+
+  // Handles typing inside editable fields: keeps commas updated and preserves cursor position
+  function handleInputFormatting(input) {
+    const originalValue = input.value;
+    const cursorPosition = input.selectionStart;
+    const originalLength = originalValue.length;
+
+    // Remove any character except digits and a single period
+    let raw = originalValue.replace(/[^\d.]/g, "");
+    const dotIndex = raw.indexOf(".");
+    if (dotIndex !== -1) {
+      raw = raw.slice(0, dotIndex + 1) + raw.slice(dotIndex + 1).replace(/\./g, "");
+    }
+
+    if (raw === "") {
+      input.value = "";
+      updateView();
+      return;
+    }
+
+    const parts = raw.split(".");
+    const intPart = parts[0] ? parts[0].replace(/^0+(?=\d)/, "") : "0";
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const formatted = parts.length > 1 ? formattedInt + "." + parts[1] : formattedInt;
+
+    input.value = formatted;
+
+    // Adjust cursor position so cursor doesn't jump to the end
+    const newLength = formatted.length;
+    const newCursor = Math.max(0, cursorPosition + (newLength - originalLength));
+    input.setSelectionRange(newCursor, newCursor);
+
+    updateView();
+  }
+
   function formatPercent(part, total) {
     if (!total || total <= 0) return "0%";
     return Math.round((part / total) * 100) + "%";
   }
 
-  // Render Navigation Tabs
   function renderTabs() {
     tabsNav.innerHTML = "";
     SCENARIOS.forEach((scenario, idx) => {
@@ -628,13 +677,11 @@
 
   function loadActiveScenarioInputs() {
     const current = SCENARIOS[activeTabIndex];
-    mortgageInput.value = current.mortgage;
-    grossInput.value = current.gross;
+    mortgageInput.value = formatWithCommas(current.mortgage);
+    grossInput.value = formatWithCommas(current.gross);
   }
 
-  // SVG Pie Slice Path Helper
   function createPieSlicePath(cx, cy, r, startAngle, endAngle) {
-    // Handle full circle edge case
     if (endAngle - startAngle >= Math.PI * 2 - 0.0001) {
       return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`;
     }
@@ -646,7 +693,6 @@
     return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
   }
 
-  // Build SVG Pie Chart with Column Label and Value on each slice
   function renderPieChart(slices, net) {
     const nonNegative = slices.every(s => s.value >= 0);
     const total = slices.reduce((acc, s) => acc + s.value, 0);
@@ -654,7 +700,7 @@
     if (!nonNegative || total <= 0) {
       chartContainer.innerHTML = `
         <div class="warning-banner">
-          Pie chart requires positive share values. Please ensure Gross House Value is sufficiently greater than the Mortgage.
+          Pie chart requires positive share values. Please ensure Gross House Value is greater than the Mortgage.
         </div>`;
       chartLegend.innerHTML = "";
       return;
@@ -666,7 +712,7 @@
     const cy = height / 2;
     const radius = 135;
 
-    let currentAngle = -Math.PI / 2; // Start at 12 o'clock
+    let currentAngle = -Math.PI / 2;
     let pathsHtml = "";
     let labelsHtml = "";
 
@@ -679,7 +725,6 @@
       const pathData = createPieSlicePath(cx, cy, radius, currentAngle, endAngle);
       pathsHtml += `<path d="${pathData}" fill="${slice.color}" stroke="#ffffff" stroke-width="2.5"></path>`;
 
-      // Position label inside slice
       const labelRadius = radius * 0.62;
       const lx = cx + labelRadius * Math.cos(midAngle);
       const ly = cy + labelRadius * Math.sin(midAngle);
@@ -713,13 +758,11 @@
     `).join("");
   }
 
-  // Recalculate and Update Table + Pie Chart
   function updateView() {
     const current = SCENARIOS[activeTabIndex];
-    const mortgage = parseFloat(mortgageInput.value) || 0;
-    const gross = parseFloat(grossInput.value) || 0;
+    const mortgage = parseFormattedNumber(mortgageInput.value);
+    const gross = parseFormattedNumber(grossInput.value);
 
-    // Save state
     if (syncToggle.checked) {
       SCENARIOS.forEach(s => {
         s.mortgage = mortgage;
@@ -732,12 +775,10 @@
 
     const { net, sharon, wendy, jono } = current.calculate(mortgage, gross);
 
-    // Build dynamic column labels matching the spreadsheet
     const sharonLabel = `Sharon ${formatPercent(sharon, net)}`;
     const wendyLabel = `Wendy ${formatPercent(wendy, net)}`;
     const jonoLabel = `Jono ${formatPercent(jono, net)}`;
 
-    // Update Scenario Text & Headers
     scenarioTitle.textContent = current.title;
     scenarioDesc.textContent = current.subtitle;
     netHeader.textContent = current.netColumnTitle;
@@ -745,19 +786,16 @@
     wendyHeaderText.textContent = wendyLabel;
     jonoHeaderText.textContent = jonoLabel;
 
-    // Update mobile portrait data-labels so stacked view shows live percentages too
     netCell.setAttribute("data-label", current.netColumnTitle);
     sharonCell.setAttribute("data-label", sharonLabel);
     wendyCell.setAttribute("data-label", wendyLabel);
     jonoCell.setAttribute("data-label", jonoLabel);
 
-    // Update Table Values
     netCell.textContent = formatCurrency(net);
     sharonCell.textContent = formatCurrency(sharon);
     wendyCell.textContent = formatCurrency(wendy);
     jonoCell.textContent = formatCurrency(jono);
 
-    // Update Pie Chart
     const slices = [
       { label: sharonLabel, value: sharon, color: COLORS.sharon },
       { label: wendyLabel, value: wendy, color: COLORS.wendy },
@@ -766,14 +804,14 @@
     renderPieChart(slices, net);
   }
 
-  // Event Listeners
-  mortgageInput.addEventListener("input", updateView);
-  grossInput.addEventListener("input", updateView);
+  // Real-time formatting on input
+  mortgageInput.addEventListener("input", () => handleInputFormatting(mortgageInput));
+  grossInput.addEventListener("input", () => handleInputFormatting(grossInput));
 
   syncToggle.addEventListener("change", () => {
     if (syncToggle.checked) {
-      const m = parseFloat(mortgageInput.value) || 0;
-      const g = parseFloat(grossInput.value) || 0;
+      const m = parseFormattedNumber(mortgageInput.value);
+      const g = parseFormattedNumber(grossInput.value);
       SCENARIOS.forEach(s => {
         s.mortgage = m;
         s.gross = g;
@@ -790,7 +828,7 @@
     updateView();
   });
 
-  // Initialize
+  // Initial load
   renderTabs();
   loadActiveScenarioInputs();
   updateView();
