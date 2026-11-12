@@ -114,7 +114,7 @@
       color: #ffffff;
     }
 
-    /* Navigation Tabs */
+    /* Navigation Tabs + Percentage Drop-Down Selector */
     .tabs-nav {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -147,6 +147,68 @@
       color: #ffffff;
       border-color: var(--primary);
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    }
+
+    /* Drop-down selector styled to match tab navigation */
+    .dropdown-tab-wrap {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 6px 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+      cursor: pointer;
+    }
+
+    .dropdown-tab-wrap:hover {
+      border-color: #cbd5e1;
+    }
+
+    .dropdown-tab-wrap.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    }
+
+    .dropdown-tab-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+      line-height: 1.1;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .dropdown-tab-wrap.active .dropdown-tab-label {
+      color: #dbeafe;
+    }
+
+    .pct-select {
+      width: 100%;
+      max-width: 135px;
+      font-family: var(--font-stack);
+      font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+      font-weight: 700;
+      color: var(--text-main);
+      background-color: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 2px 6px;
+      text-align: center;
+      text-align-last: center;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .dropdown-tab-wrap.active .pct-select {
+      background-color: #ffffff;
+      color: var(--primary);
+      border-color: #ffffff;
     }
 
     /* Main Content Card */
@@ -254,9 +316,9 @@
       width: 100%;
       border: none;
       outline: none;
-      text-align: left; /* Left justified immediately after currency symbol */
+      text-align: left;
       font-family: var(--font-stack);
-      font-size: 16px; /* Prevents auto zoom in iOS Safari */
+      font-size: 16px; /* Prevents auto-zoom on iOS Safari */
       font-weight: 700;
       color: var(--text-main);
       background: transparent;
@@ -437,10 +499,10 @@
     </div>
   </header>
 
-  <!-- Tab Buttons -->
+  <!-- Navigation Bar (3 Tab Buttons + Percentage Drop-Down Selector) -->
   <nav class="tabs-nav" id="tabsNav" role="tablist"></nav>
 
-  <!-- Active Tab Content -->
+  <!-- Active View Content -->
   <main class="tab-panel">
     <div class="scenario-header">
       <h2 id="scenarioTitle"></h2>
@@ -491,12 +553,15 @@
 </div>
 
 <script>
+  let selectedRemainderPercent = 50; // Default drop-down selection (50% of the remaining 70%)
+
   const SCENARIOS = [
     {
       id: "equal-thirds",
+      type: "tab",
       tabName: "1 third each",
-      title: "Estate Split Equally Three Ways",
-      subtitle: "Net house value (Gross minus Mortgage) is divided equally three ways.",
+      getTitle: () => "Estate Split Equally Three Ways",
+      getSubtitle: () => "Net house value (Gross minus Mortgage) is divided equally three ways.",
       netColumnTitle: "Net House Value",
       mortgage: 100000,
       gross: 925000,
@@ -510,9 +575,10 @@
     },
     {
       id: "net-plus-third",
+      type: "tab",
       tabName: "Net plus 1 third",
-      title: "Sharon 30% of net total plus 1/3rd of 70% remainder",
-      subtitle: "Sharon receives 30% of the Net House Value plus one-third of the remaining 70% net value.",
+      getTitle: () => "Sharon 30% of net total plus 1/3rd of 70% remainder",
+      getSubtitle: () => "Sharon receives 30% of the Net House Value plus one-third of the remaining 70% net value.",
       netColumnTitle: "Net House Value",
       mortgage: 100000,
       gross: 925000,
@@ -526,29 +592,38 @@
       }
     },
     {
-      id: "gross-plus-third",
-      tabName: "Gross plus 1 third",
-      title: "Sharon on 30% of gross value plus 1/3rd of 70% remainder",
-      subtitle: "Sharon receives 30% of the Gross House Value, and the remaining Net Value is divided equally three ways.",
-      netColumnTitle: "House Net Value",
+      id: "custom-remainder-percent",
+      type: "dropdown",
+      tabName: "Sharon % of 70%",
+      getTitle: () => {
+        const totalSharonPct = 30 + (selectedRemainderPercent * 0.70);
+        const formattedTotal = Number.isInteger(totalSharonPct) ? totalSharonPct : totalSharonPct.toFixed(1);
+        return `Sharon 30% + ${selectedRemainderPercent}% of remaining 70% (${formattedTotal}% Total)`;
+      },
+      getSubtitle: () => {
+        const remainingPctForOthers = 100 - selectedRemainderPercent;
+        return `Sharon receives her 30% of Net House Value plus ${selectedRemainderPercent}% of the remaining 70%. The remaining ${remainingPctForOthers}% of that 70% is split equally between Wendy and Jono.`;
+      },
+      netColumnTitle: "Net House Value",
       mortgage: 100000,
       gross: 925000,
       calculate(mortgage, gross) {
         const net = gross - mortgage;
-        const sharonGrossPortion = gross * 0.30;
-        const remainingNet = net - sharonGrossPortion;
-        const thirdOfRemainder = remainingNet / 3;
-        const sharon = sharonGrossPortion + thirdOfRemainder;
-        const wendy = thirdOfRemainder;
-        const jono = thirdOfRemainder;
+        const remainder = net * 0.70;
+        const p = selectedRemainderPercent / 100;
+        const sharon = (net * 0.30) + (remainder * p);
+        const othersRemainder = remainder * (1 - p);
+        const wendy = othersRemainder / 2;
+        const jono = othersRemainder / 2;
         return { net, sharon, wendy, jono };
       }
     },
     {
       id: "sharon-minus-mortgage",
+      type: "tab",
       tabName: "Sharon minus mortgage first",
-      title: "Sharon Repays Outstanding Mortgage from her 30%",
-      subtitle: "Sharon pays the outstanding mortgage out of her 30% gross share. Remaining 70% is divided evenly 3 ways.",
+      getTitle: () => "Sharon Repays Outstanding Mortgage from her 30%",
+      getSubtitle: () => "Sharon pays the outstanding mortgage out of her 30% gross share. Remaining 70% is divided evenly 3 ways.",
       netColumnTitle: "House Net Value",
       mortgage: 100000,
       gross: 925000,
@@ -617,13 +692,12 @@
     return parseFloat(clean) || 0;
   }
 
-  // Handles typing inside editable fields: keeps commas updated and preserves cursor position
+  // Real-time comma formatting preserving cursor position
   function handleInputFormatting(input) {
     const originalValue = input.value;
     const cursorPosition = input.selectionStart;
     const originalLength = originalValue.length;
 
-    // Remove any character except digits and a single period
     let raw = originalValue.replace(/[^\d.]/g, "");
     const dotIndex = raw.indexOf(".");
     if (dotIndex !== -1) {
@@ -643,7 +717,6 @@
 
     input.value = formatted;
 
-    // Adjust cursor position so cursor doesn't jump to the end
     const newLength = formatted.length;
     const newCursor = Math.max(0, cursorPosition + (newLength - originalLength));
     input.setSelectionRange(newCursor, newCursor);
@@ -651,27 +724,93 @@
     updateView();
   }
 
+  // Format percentage cleanly (e.g., 30% or 17.5%)
   function formatPercent(part, total) {
     if (!total || total <= 0) return "0%";
-    return Math.round((part / total) * 100) + "%";
+    const pct = (part / total) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    return (Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)) + "%";
   }
 
+  // Render Navigation Tabs & Drop-down Selector
   function renderTabs() {
     tabsNav.innerHTML = "";
     SCENARIOS.forEach((scenario, idx) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "tab-btn" + (idx === activeTabIndex ? " active" : "");
-      btn.textContent = scenario.tabName;
-      btn.setAttribute("role", "tab");
-      btn.setAttribute("aria-selected", idx === activeTabIndex ? "true" : "false");
-      btn.addEventListener("click", () => {
-        activeTabIndex = idx;
-        renderTabs();
-        loadActiveScenarioInputs();
-        updateView();
-      });
-      tabsNav.appendChild(btn);
+      if (scenario.type === "dropdown") {
+        const wrap = document.createElement("div");
+        wrap.className = "dropdown-tab-wrap" + (idx === activeTabIndex ? " active" : "");
+
+        const label = document.createElement("label");
+        label.className = "dropdown-tab-label";
+        label.setAttribute("for", "remainderPercentSelect");
+        label.textContent = "Sharon + % of 70%";
+
+        const select = document.createElement("select");
+        select.id = "remainderPercentSelect";
+        select.className = "pct-select";
+        select.setAttribute("aria-label", "Select Sharon's percentage of the remaining 70% house value");
+
+        for (let p = 0; p <= 100; p += 1) {
+          const opt = document.createElement("option");
+          opt.value = p;
+          opt.textContent = `${p}%`;
+          if (p === selectedRemainderPercent) {
+            opt.selected = true;
+          }
+          select.appendChild(opt);
+        }
+
+        // Activate this view when clicking or focusing the wrapper/select
+        wrap.addEventListener("click", (e) => {
+          if (activeTabIndex !== idx) {
+            activeTabIndex = idx;
+            renderTabs();
+            loadActiveScenarioInputs();
+            updateView();
+            const refreshedSelect = document.getElementById("remainderPercentSelect");
+            if (refreshedSelect && e.target !== refreshedSelect) {
+              refreshedSelect.focus();
+            }
+          }
+        });
+
+        select.addEventListener("focus", () => {
+          if (activeTabIndex !== idx) {
+            activeTabIndex = idx;
+            document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+            wrap.classList.add("active");
+            loadActiveScenarioInputs();
+            updateView();
+          }
+        });
+
+        select.addEventListener("change", (e) => {
+          selectedRemainderPercent = parseInt(e.target.value, 10) || 0;
+          activeTabIndex = idx;
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+          wrap.classList.add("active");
+          loadActiveScenarioInputs();
+          updateView();
+        });
+
+        wrap.appendChild(label);
+        wrap.appendChild(select);
+        tabsNav.appendChild(wrap);
+      } else {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tab-btn" + (idx === activeTabIndex ? " active" : "");
+        btn.textContent = scenario.tabName;
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", idx === activeTabIndex ? "true" : "false");
+        btn.addEventListener("click", () => {
+          activeTabIndex = idx;
+          renderTabs();
+          loadActiveScenarioInputs();
+          updateView();
+        });
+        tabsNav.appendChild(btn);
+      }
     });
   }
 
@@ -779,8 +918,8 @@
     const wendyLabel = `Wendy ${formatPercent(wendy, net)}`;
     const jonoLabel = `Jono ${formatPercent(jono, net)}`;
 
-    scenarioTitle.textContent = current.title;
-    scenarioDesc.textContent = current.subtitle;
+    scenarioTitle.textContent = current.getTitle();
+    scenarioDesc.textContent = current.getSubtitle();
     netHeader.textContent = current.netColumnTitle;
     sharonHeaderText.textContent = sharonLabel;
     wendyHeaderText.textContent = wendyLabel;
@@ -804,7 +943,6 @@
     renderPieChart(slices, net);
   }
 
-  // Real-time formatting on input
   mortgageInput.addEventListener("input", () => handleInputFormatting(mortgageInput));
   grossInput.addEventListener("input", () => handleInputFormatting(grossInput));
 
@@ -824,11 +962,13 @@
       s.mortgage = 100000;
       s.gross = 925000;
     });
+    selectedRemainderPercent = 50;
+    renderTabs();
     loadActiveScenarioInputs();
     updateView();
   });
 
-  // Initial load
+  // Initialize
   renderTabs();
   loadActiveScenarioInputs();
   updateView();
