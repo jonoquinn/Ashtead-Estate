@@ -114,7 +114,7 @@
       color: #ffffff;
     }
 
-    /* Navigation Tabs + Percentage Drop-Down Selector */
+    /* Navigation Tabs + Percentage Drop-Down Selectors */
     .tabs-nav {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -149,7 +149,7 @@
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
     }
 
-    /* Drop-down selector styled to match tab navigation */
+    /* Drop-down selectors styled to match tab navigation */
     .dropdown-tab-wrap {
       display: flex;
       flex-direction: column;
@@ -499,7 +499,7 @@
     </div>
   </header>
 
-  <!-- Navigation Bar (3 Tab Buttons + Percentage Drop-Down Selector) -->
+  <!-- Navigation Bar (2 Tab Buttons + 2 Percentage Drop-Down Selectors) -->
   <nav class="tabs-nav" id="tabsNav" role="tablist"></nav>
 
   <!-- Active View Content -->
@@ -553,7 +553,8 @@
 </div>
 
 <script>
-  let selectedRemainderPercent = 33; // Default drop-down selection (33% of the remaining 70%)
+  let selectedRemainderPercent = 33; // Default for "Sharon + % of 70%" (0% to 100%)
+  let selectedMortgagePercent = 30;  // Default for "Sharon % mortgage" (0% to 30%)
 
   const SCENARIOS = [
     {
@@ -594,7 +595,13 @@
     {
       id: "custom-remainder-percent",
       type: "dropdown",
-      tabName: "Sharon % of 70%",
+      selectId: "remainderPercentSelect",
+      labelText: "Sharon + % of 70%",
+      ariaLabel: "Select Sharon's percentage of the remaining 70% house value",
+      min: 0,
+      max: 100,
+      getValue: () => selectedRemainderPercent,
+      setValue: (val) => { selectedRemainderPercent = val; },
       getTitle: () => {
         const totalSharonPct = 30 + (selectedRemainderPercent * 0.70);
         const formattedTotal = Number.isInteger(totalSharonPct) ? totalSharonPct : totalSharonPct.toFixed(1);
@@ -620,18 +627,28 @@
     },
     {
       id: "sharon-minus-mortgage",
-      type: "tab",
-      tabName: "Sharon minus mortgage first",
-      getTitle: () => "Sharon Repays Outstanding Mortgage from her 30%",
-      getSubtitle: () => "Sharon pays the outstanding mortgage out of her 30% gross share. Remaining 70% is divided evenly 3 ways.",
+      type: "dropdown",
+      selectId: "mortgagePercentSelect",
+      labelText: "Sharon % mortgage",
+      ariaLabel: "Select Sharon's gross share percentage (0% to 30%) from which mortgage is repaid",
+      min: 0,
+      max: 30,
+      getValue: () => selectedMortgagePercent,
+      setValue: (val) => { selectedMortgagePercent = val; },
+      getTitle: () => `Sharon Repays Outstanding Mortgage from her ${selectedMortgagePercent}%`,
+      getSubtitle: () => {
+        const remainingPct = 100 - selectedMortgagePercent;
+        return `Sharon pays the outstanding mortgage out of her ${selectedMortgagePercent}% gross share. Remaining ${remainingPct}% is divided evenly 3 ways.`;
+      },
       netColumnTitle: "House Net Value",
       mortgage: 100000,
       gross: 925000,
       calculate(mortgage, gross) {
         const net = gross - mortgage;
-        const sharonAfterMortgage = (gross * 0.30) - mortgage;
-        const remainingSeventyPercent = gross * 0.70;
-        const thirdOfRemaining = remainingSeventyPercent / 3;
+        const sharonPct = selectedMortgagePercent / 100;
+        const remainingPct = 1 - sharonPct;
+        const sharonAfterMortgage = (gross * sharonPct) - mortgage;
+        const thirdOfRemaining = (gross * remainingPct) / 3;
         const sharon = sharonAfterMortgage + thirdOfRemaining;
         const wendy = thirdOfRemaining;
         const jono = thirdOfRemaining;
@@ -732,7 +749,19 @@
     return (Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)) + "%";
   }
 
-  // Render Navigation Tabs & Drop-down Selector
+  function setActiveNavVisual(activeIdx) {
+    document.querySelectorAll("#tabsNav > *").forEach((el, i) => {
+      if (i === activeIdx) {
+        el.classList.add("active");
+        if (el.hasAttribute("aria-selected")) el.setAttribute("aria-selected", "true");
+      } else {
+        el.classList.remove("active");
+        if (el.hasAttribute("aria-selected")) el.setAttribute("aria-selected", "false");
+      }
+    });
+  }
+
+  // Render Navigation Tabs & Drop-down Selectors
   function renderTabs() {
     tabsNav.innerHTML = "";
     SCENARIOS.forEach((scenario, idx) => {
@@ -742,19 +771,20 @@
 
         const label = document.createElement("label");
         label.className = "dropdown-tab-label";
-        label.setAttribute("for", "remainderPercentSelect");
-        label.textContent = "Sharon + % of 70%";
+        label.setAttribute("for", scenario.selectId);
+        label.textContent = scenario.labelText;
 
         const select = document.createElement("select");
-        select.id = "remainderPercentSelect";
+        select.id = scenario.selectId;
         select.className = "pct-select";
-        select.setAttribute("aria-label", "Select Sharon's percentage of the remaining 70% house value");
+        select.setAttribute("aria-label", scenario.ariaLabel);
 
-        for (let p = 0; p <= 100; p += 1) {
+        const currentVal = scenario.getValue();
+        for (let p = scenario.min; p <= scenario.max; p += 1) {
           const opt = document.createElement("option");
           opt.value = p;
           opt.textContent = `${p}%`;
-          if (p === selectedRemainderPercent) {
+          if (p === currentVal) {
             opt.selected = true;
           }
           select.appendChild(opt);
@@ -764,12 +794,11 @@
         wrap.addEventListener("click", (e) => {
           if (activeTabIndex !== idx) {
             activeTabIndex = idx;
-            renderTabs();
+            setActiveNavVisual(idx);
             loadActiveScenarioInputs();
             updateView();
-            const refreshedSelect = document.getElementById("remainderPercentSelect");
-            if (refreshedSelect && e.target !== refreshedSelect) {
-              refreshedSelect.focus();
+            if (e.target !== select) {
+              select.focus();
             }
           }
         });
@@ -777,18 +806,17 @@
         select.addEventListener("focus", () => {
           if (activeTabIndex !== idx) {
             activeTabIndex = idx;
-            document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-            wrap.classList.add("active");
+            setActiveNavVisual(idx);
             loadActiveScenarioInputs();
             updateView();
           }
         });
 
         select.addEventListener("change", (e) => {
-          selectedRemainderPercent = parseInt(e.target.value, 10) || 0;
+          const parsed = parseInt(e.target.value, 10);
+          scenario.setValue(isNaN(parsed) ? scenario.min : parsed);
           activeTabIndex = idx;
-          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-          wrap.classList.add("active");
+          setActiveNavVisual(idx);
           loadActiveScenarioInputs();
           updateView();
         });
@@ -805,7 +833,7 @@
         btn.setAttribute("aria-selected", idx === activeTabIndex ? "true" : "false");
         btn.addEventListener("click", () => {
           activeTabIndex = idx;
-          renderTabs();
+          setActiveNavVisual(idx);
           loadActiveScenarioInputs();
           updateView();
         });
@@ -839,7 +867,7 @@
     if (!nonNegative || total <= 0) {
       chartContainer.innerHTML = `
         <div class="warning-banner">
-          Pie chart requires positive share values. Please ensure Gross House Value is greater than the Mortgage.
+          Pie chart requires non-negative share values. Please increase Sharon's percentage or reduce the Mortgage so Sharon's share does not fall below £0.
         </div>`;
       chartLegend.innerHTML = "";
       return;
@@ -963,6 +991,7 @@
       s.gross = 925000;
     });
     selectedRemainderPercent = 33;
+    selectedMortgagePercent = 30;
     renderTabs();
     loadActiveScenarioInputs();
     updateView();
