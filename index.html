@@ -554,7 +554,12 @@
 
 <script>
   let selectedRemainderPercent = 33; // Default for "Sharon + % of 70%" (0% to 100%)
-  let selectedMortgagePercent = 30;  // Default for "Sharon % mortgage" (0% to 30%)
+  let selectedPropertyPercent = 33;  // Default for "Sharon’s % of property" (0% to 33%)
+
+  function formatCleanNumber(val) {
+    const rounded = Math.round(val * 10) / 10;
+    return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+  }
 
   const SCENARIOS = [
     {
@@ -604,8 +609,7 @@
       setValue: (val) => { selectedRemainderPercent = val; },
       getTitle: () => {
         const totalSharonPct = 30 + (selectedRemainderPercent * 0.70);
-        const formattedTotal = Number.isInteger(totalSharonPct) ? totalSharonPct : totalSharonPct.toFixed(1);
-        return `Sharon 30% + ${selectedRemainderPercent}% of remaining 70% (${formattedTotal}% Total)`;
+        return `Sharon 30% + ${selectedRemainderPercent}% of remaining 70% (${formatCleanNumber(totalSharonPct)}% Total)`;
       },
       getSubtitle: () => {
         const remainingPctForOthers = 100 - selectedRemainderPercent;
@@ -626,30 +630,33 @@
       }
     },
     {
-      id: "sharon-minus-mortgage",
+      id: "sharon-property-percent",
       type: "dropdown",
-      selectId: "mortgagePercentSelect",
-      labelText: "Sharon % mortgage",
-      ariaLabel: "Select Sharon's gross share percentage (0% to 30%) from which mortgage is repaid",
+      selectId: "propertyPercentSelect",
+      labelText: "Sharon’s % of property",
+      ariaLabel: "Select Sharon's initial percentage ownership of the property after mortgage payoff (0% to 33%)",
       min: 0,
-      max: 30,
-      getValue: () => selectedMortgagePercent,
-      setValue: (val) => { selectedMortgagePercent = val; },
-      getTitle: () => `Sharon Repays Outstanding Mortgage from her ${selectedMortgagePercent}%`,
-      getSubtitle: () => {
-        const remainingPct = 100 - selectedMortgagePercent;
-        return `Sharon pays the outstanding mortgage out of her ${selectedMortgagePercent}% gross share. Remaining ${remainingPct}% is divided evenly 3 ways.`;
+      max: 33,
+      getValue: () => selectedPropertyPercent,
+      setValue: (val) => { selectedPropertyPercent = val; },
+      getTitle: () => {
+        const remainingPct = 100 - selectedPropertyPercent;
+        const totalSharonPct = selectedPropertyPercent + (remainingPct / 3);
+        return `Sharon’s ${selectedPropertyPercent}% Property Ownership + 1/3rd of Remaining ${remainingPct}% (${formatCleanNumber(totalSharonPct)}% Total)`;
       },
-      netColumnTitle: "House Net Value",
+      getSubtitle: () => {
+        const remainingPct = 100 - selectedPropertyPercent;
+        return `After paying off the mortgage, Sharon receives her ${selectedPropertyPercent}% ownership share plus 1/3rd of the remaining ${remainingPct}%. Wendy and Jono each receive 1/3rd of the remaining ${remainingPct}%.`;
+      },
+      netColumnTitle: "Net House Value",
       mortgage: 100000,
       gross: 925000,
       calculate(mortgage, gross) {
         const net = gross - mortgage;
-        const sharonPct = selectedMortgagePercent / 100;
-        const remainingPct = 1 - sharonPct;
-        const sharonAfterMortgage = (gross * sharonPct) - mortgage;
-        const thirdOfRemaining = (gross * remainingPct) / 3;
-        const sharon = sharonAfterMortgage + thirdOfRemaining;
+        const ownedFraction = selectedPropertyPercent / 100;
+        const remainingFraction = 1 - ownedFraction;
+        const thirdOfRemaining = (net * remainingFraction) / 3;
+        const sharon = (net * ownedFraction) + thirdOfRemaining;
         const wendy = thirdOfRemaining;
         const jono = thirdOfRemaining;
         return { net, sharon, wendy, jono };
@@ -741,7 +748,7 @@
     updateView();
   }
 
-  // Format percentage cleanly (e.g., 30% or 17.5%)
+  // Format percentage cleanly (e.g., 30% or 22.3%)
   function formatPercent(part, total) {
     if (!total || total <= 0) return "0%";
     const pct = (part / total) * 100;
@@ -867,7 +874,7 @@
     if (!nonNegative || total <= 0) {
       chartContainer.innerHTML = `
         <div class="warning-banner">
-          Pie chart requires non-negative share values. Please increase Sharon's percentage or reduce the Mortgage so Sharon's share does not fall below £0.
+          Pie chart requires positive share values. Please ensure Gross House Value is greater than the Mortgage.
         </div>`;
       chartLegend.innerHTML = "";
       return;
@@ -991,7 +998,7 @@
       s.gross = 925000;
     });
     selectedRemainderPercent = 33;
-    selectedMortgagePercent = 30;
+    selectedPropertyPercent = 33;
     renderTabs();
     loadActiveScenarioInputs();
     updateView();
